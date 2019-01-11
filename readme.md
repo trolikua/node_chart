@@ -3,7 +3,7 @@
 Created special for cleint wishes.
 
 ### Features:
-  * import from Google SpreadSheets
-  * import from file
-  * import dayly using Cron
+  * import to database dayly using Cron from Google SpreadSheets
+  * import from uploaded file
   * show charts data per node using tabs
+  * show four different charts
