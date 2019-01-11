@@ -1,0 +1,222 @@
+<?php
+/**
+* @file
+* Module for adding chart from CSV file to nodes.
+*/
+
+//module tables
+$chart_db_tables = [
+  '0' => 'node_chart_action_365',
+  '1' => 'node_chart_action_30',
+  '2' => 'node_chart_view_365',
+  '3' => 'node_chart_view_30'
+];
+variable_set('chart_db_tables', $chart_db_tables);
+
+function node_chart_menu() {
+    $items = array();
+  $items['admin/config/services/node_chart'] = array(
+    'title'            => 'Node Chart',
+    'description'      => 'Configure the Node Chart and upload files.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('node_chart_settings_form'),
+    'access arguments' => array('administer site configuration')
+  );
+
+  $items['node/%node/node_chart'] = array(
+    'access callback' => TRUE,
+//    'access callback' => 'node_chart_check_access',
+    'access arguments' => array('node',1),
+    'page callback' => 'node_chart_render_tab',
+    'page arguments' => array(1),
+    'title' => 'Stats',
+    'weight' => 200,
+    'type' => MENU_LOCAL_TASK,
+  );
+
+  return $items;
+}
+
+function node_chart_render_tab () {
+  $node = menu_get_object();
+  $nid = $node->nid;
+  $result = [];
+
+//  retrive info from DB
+  $tables = variable_get('chart_db_tables');
+  foreach ($tables as $table) {
+    $result [] = db_select($table,'n')
+      ->fields('n')
+      ->condition('node_id_field',  $nid)
+      ->execute()
+      ->fetchAll();
+  }
+
+//  send data for charts to JS
+  drupal_add_js(array('node_chart' => array('chartData' => $result)), array('type' => 'setting'));
+  return '<div id="chart_place1" style="min-height: 400px"></div>
+  <div id="chart_place2" style="min-height: 400px"></div>
+  <div id="chart_place3" style="min-height: 400px"></div>
+  <div id="chart_place4" style="min-height: 400px"></div>';
+}
+
+function node_chart_check_access() {
+  global $user;
+  $node = menu_get_object();
+  return $node->uid == $user->uid || user_access('administer');
+}
+
+function node_chart_settings_form ($form, $form_state) {
+  $form = array();
+
+  $form['node_chart_csv'] = array(
+    '#description' => t('Please choose CSV file'),
+    '#type' => 'file',
+    '#title' => t('CSV file'),
+    '#upload_validators' => [
+      '#upload_validators' => array('file_validate_extension' => array('csv')),
+        'file_clean_name' => array()
+    ],
+    '#progress_indicator' => 'bar',
+  );
+
+  $form['file_type'] = array(
+    '#type' => 'select',
+    '#title' => t('Type of file'),
+    '#options' => array(
+        'Actions 365 days',
+      'Actions 30 days',
+      'Views 365 days',
+      'Views 30 days'),
+  );
+
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => 'Submit'
+  );
+  return $form;
+}
+
+function  node_chart_cron () {
+  $now = new DateTime(date(DATE_ISO8601));
+  $last_checked = new DateTime(variable_get('last_checkedvar', date(DATE_ISO8601, '0')));
+  $diff = $now->diff( $last_checked );
+
+  if ($diff->days >= 1){
+//    watchdog('cron', 'Hello Cron!');
+    return node_chart_get_data_from_google ();
+  }
+
+  return FALSE;
+}
+
+function node_chart_get_data_from_google () {
+  $main_link = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vR04s-oJdNm3yf_eG8_S2an8S-93nracDPl4wc3H5SPIfNJX7AxFhHmO3XN-TeCg0QiJeeUSZoLhGHJ/pub?gid=';
+  $link_suffix = [
+    '0' => '955995093&single=true&output=csv',
+    '1' => '634260650&single=true&output=csv',
+    '2' => '787270398&single=true&output=csv',
+    '3' => '62519201&single=true&output=csv'
+  ];
+
+  foreach ($link_suffix as $db_num => $file) {
+    $csv = system_retrieve_file($main_link.$file, "public://", TRUE, 'FILE_EXISTS_REPLACE');
+    if (!$csv) return watchdog('node_chart', 'Hello from GOOGLE!<br>CSV importing wrong :(', 'error');
+    node_chart_save_data($db_num, $csv);
+  }
+  return watchdog('node_chart', 'Hello from GOOGLE! CSV importing was done');
+}
+
+function node_chart_save_data ($db_num, $file) {
+  $db_arr = variable_get('chart_db_tables');
+  $db = $db_arr[$db_num];
+
+//  clearing tables
+  $clear = db_query("TRUNCATE {$db}");
+  if ($clear) {
+    drupal_set_message("The table '$db' for CSV was cleared",'status');
+  } else {
+    drupal_set_message("The table '$db' can't clear :(",'error');
+  }
+
+  $csv_file = file_load($file->fid);
+  $file = fopen($csv_file->uri, "r");
+
+  $row = 0;
+  while(! feof($file)) {
+    $row++;
+    $csv = fgetcsv($file);
+    if ($row !=1) {
+      switch ($db_num) {
+        case 0:
+          $fields = [
+            'node_id_field' => $csv[0],
+            'a_field' => $csv[1],
+            'm_field' => $csv[2],
+            'n_field' => $csv[3],
+          ];
+          break;
+        case 1:
+          $fields = [
+            'node_id_field' => $csv[0],
+            'a_field' => $csv[1],
+            'd_field' => $csv[2],
+            'n_field' => $csv[3]
+          ];
+          break;
+        case 2:
+          $fields = [
+            'node_id_field' => $csv[0],
+            'm_field' => $csv[1],
+            'v_field' => $csv[2]
+          ];
+          break;
+        case 3:
+          $fields = [
+            'node_id_field' => $csv[0],
+            'd_field' => $csv[1],
+            'v_field' => $csv[2],
+          ];
+      }
+      $res = db_insert($db)
+        ->fields($fields)->execute();
+    }
+  }
+  fclose($file);
+
+  if ($res) {
+    drupal_set_message('CSV data added to the database','status');
+    return TRUE;
+  }
+  else {
+    drupal_set_message('Something wrong :(','error');
+    return FALSE;
+  }
+}
+
+function node_chart_settings_form_submit(&$form, &$form_state) {
+  $db_num = $form_state['values']['file_type'];
+  $file = file_save_upload('node_chart_csv');
+  return node_chart_save_data($db_num, $file);
+}
+
+function node_chart_settings_form_validate($form, &$form_state) {
+  $validators = array('file_validate_extensions' => array('csv'));
+  // Check for a new uploaded file.
+  $file = file_save_upload('node_chart_csv', $validators);
+  if (isset($file)) {
+    // File upload was attempted.
+    if ($file) {
+      // Put the temporary file in form_values so we can save it on submit.
+      $form_state['values']['node_chart_csv'] = $file;
+    }
+    else {
+      // File upload failed.
+      form_set_error('node_chart_csv', t('The file could not be uploaded.'));
+    }
+  }
+}
+
+function file_clean_name($file) {
+  $file->filename = str_replace(' ', '_', $file->filename);
+}

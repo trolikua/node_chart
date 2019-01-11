@@ -1,0 +1,49 @@
+<?php
+function node_chart_schema () {
+  $schema['node_chart_action_365'] = array(
+    'fields' => array(
+      'id' => array('type' => 'serial',  'size'=>'normal',  'not null' => TRUE),
+      'node_id_field' => array('type' => 'int', 'length' => 11,  'not null' => TRUE),
+      'a_field' => array('type' => 'varchar', 'length' => 30,  'not null' => FALSE),
+      'm_field' => array('type' => 'int', 'length' => 10,  'not null' => TRUE),
+      'n_field' => array('type' => 'int', 'length' => 10,  'not null' => TRUE)
+    ),
+    'primary key' => array('id')
+  );
+  $schema['node_chart_view_365'] = array(
+    'fields' => array(
+      'id' => array('type' => 'serial',  'size'=>'normal',  'not null' => TRUE),
+      'node_id_field' => array('type' => 'int', 'length' => 11,  'not null' => TRUE),
+      'm_field' => array('type' => 'int', 'length' => 10,  'not null' => TRUE),
+      'v_field' => array('type' => 'int', 'length' => 10,  'not null' => TRUE)
+    ),
+    'primary key' => array('id')
+  );
+  $schema['node_chart_action_30'] = array(
+    'fields' => array(
+      'id' => array('type' => 'serial',  'size'=>'normal',  'not null' => TRUE),
+      'node_id_field' => array('type' => 'int', 'length' => 11,  'not null' => TRUE),
+      'a_field' => array('type' => 'varchar', 'length' => 50,  'not null' => FALSE),
+      'd_field' => array('type' => 'varchar', 'length' => 11, 'not null' => FALSE),
+      'n_field' => array('type' => 'int', 'length' => 10,  'not null' => TRUE)
+    ),
+    'primary key' => array('id')
+  );
+  $schema['node_chart_view_30'] = array(
+    'fields' => array(
+      'id' => array('type' => 'serial',  'size'=>'normal',  'not null' => TRUE),
+      'node_id_field' => array('type' => 'varchar', 'length' => 11,  'not null' => TRUE),
+      'd_field' => array('type' => 'varchar', 'length' => 11, 'not null' => FALSE),
+      'v_field' => array('type' => 'int', 'length' => 10,  'not null' => TRUE)
+    ),
+    'primary key' => array('id')
+  );
+
+  return $schema;
+}
+
+function node_chart_uninstall () {
+  cache_clear_all('node_chart', 'cache', TRUE);
+  drupal_uninstall_schema('node_chart');
+  menu_rebuild();
+}
